@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, LoaderCircle, Orbit, ShieldCheck, Users } from 'lucide-react'
-import { ApiError, api, recoverPassword, setCompanyId, signIn, signUp, type Company, type Session } from './lib/api'
+import { ArrowRight, Eye, EyeOff, LoaderCircle, Orbit, ShieldCheck, Users } from 'lucide-react'
+import { ApiError, api, recoverPassword, setCompanyId, signIn, type Company, type Session } from './lib/api'
 
 function Brand() { return <div className="auth-brand"><span className="auth-brand-mark"><Orbit size={21}/></span><span>orbit<span>.</span></span></div> }
 
 export function AuthScreen({ onSession, onBack }: { onSession: (session: Session) => void; onBack?: () => void }) {
-  const [mode, setMode] = useState<'login'|'signup'|'recovery'>('login')
+  const [mode, setMode] = useState<'login'|'recovery'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -15,12 +16,11 @@ export function AuthScreen({ onSession, onBack }: { onSession: (session: Session
     event.preventDefault(); setBusy(true); setError(''); setMessage('')
     try {
       if (mode === 'login') onSession(await signIn(email, password))
-      else if (mode === 'signup') { const result = await signUp(email, password); setMessage(result.message || 'Check your email for a verification link, then return here to sign in.'); setMode('login') }
       else { await recoverPassword(email); setMessage('If that address has an account, a password reset link is on its way.') }
     } catch (e) { setError(e instanceof ApiError ? e.message : 'Authentication failed') }
     finally { setBusy(false) }
   }
-  return <main className="auth-page min-h-screen grid place-items-center bg-slate-50 px-4 py-7"><div className="auth-card w-full max-w-md rounded-2xl bg-white shadow-xl">{onBack&&<button className="auth-back-home" onClick={onBack}>← Back to home</button>}<Brand/><div className="auth-icon"><ShieldCheck size={19}/></div><div className="section-kicker">PEOPLE OPERATIONS</div><h1>{mode==='login'?'Welcome back':mode==='signup'?'Create your account':'Reset your password'}</h1><p>{mode==='login'?'Sign in to continue to your workspace.':mode==='signup'?'Use your work email to get started.':'We’ll send you a secure reset link.'}</p><form onSubmit={submit}><label>Work email<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></label>{mode!=='recovery'&&<label>Password<input type="password" required minLength={8} autoComplete={mode==='login'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters"/></label>}{error&&<div className="auth-error" role="alert">{error}</div>}{message&&<div className="auth-message" role="status">{message}</div>}<button className="primary-button auth-submit" disabled={busy}>{busy?<LoaderCircle size={16} className="spin"/>:null}{mode==='login'?'Sign in':mode==='signup'?'Create account':'Send reset link'}{!busy&&<ArrowRight size={15}/>}</button></form><div className="auth-switch">{mode==='login'?<><button onClick={()=>{setMode('recovery');setMessage('')}}>Forgot password?</button><span>·</span><button onClick={()=>{setMode('signup');setMessage('')}}>Create account</button></>:<button onClick={()=>{setMode('login');setMessage('');setError('')}}>Back to sign in</button>}</div><div className="auth-foot"><Users size={14}/> Secure sign-in powered by Supabase Auth</div></div></main>
+  return <main className="auth-page min-h-screen grid place-items-center bg-slate-50 px-4 py-7"><div className="auth-card w-full max-w-md rounded-2xl bg-white shadow-xl">{onBack&&<button className="auth-back-home" onClick={onBack}>← Back to home</button>}<Brand/><div className="section-kicker">EXISTING USERS</div><h1>{mode==='login'?'Welcome back':'Reset your password'}</h1><p>{mode==='login'?'Sign in with your company account to continue.':'We’ll email you a secure password reset link.'}</p><form onSubmit={submit}><label>Work email<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></label>{mode==='login'&&<label>Password<span className="password-field"><input type={showPassword?'text':'password'} required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/><button type="button" className="password-toggle" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?'Hide password':'Show password'} title={showPassword?'Hide password':'Show password'}>{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></span></label>}{error&&<div className="auth-error" role="alert">{error}</div>}{message&&<div className="auth-message" role="status">{message}</div>}<button className="primary-button auth-submit" disabled={busy}>{busy?<LoaderCircle size={16} className="spin"/>:null}{mode==='login'?'Sign in':'Send reset link'}{!busy&&<ArrowRight size={15}/>}</button></form><div className="auth-switch">{mode==='login'?<button onClick={()=>{setMode('recovery');setMessage('');setError('')}}>Forgot password?</button>:<button onClick={()=>{setMode('login');setMessage('');setError('')}}>Back to sign in</button>}</div><div className="auth-foot"><Users size={14}/> Secure sign-in powered by Supabase Auth</div></div></main>
 }
 
 export function CompanyRegistration({ onCreated }: { onCreated: (company: Company) => void }) {
