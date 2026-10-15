@@ -14,6 +14,7 @@ const formatDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateSt
 
 function App() {
   const [session, setSession] = useState<Session | null>(getSession)
+  const [showAuth, setShowAuth] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [companyId, setCompanyIdState] = useState(getCompanyId)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -89,7 +90,8 @@ function App() {
     finally { setSubmitting(false) }
   }
 
-  if (!session) return <AuthScreen onSession={next => { setSession(next); setDataError('') }} />
+  if (!session && !showAuth) return <PublicHome onSignIn={() => setShowAuth(true)} />
+  if (!session) return <AuthScreen onSession={next => { setSession(next); setDataError('') }} onBack={() => setShowAuth(false)} />
   const selectedCompany = companies.find(company => company.id === companyId)
   if (dataError && companies.length === 0 && !companyId) return <div className="auth-page"><div className="auth-card"><div className="section-kicker">WORKSPACE CONNECTION</div><h1>Couldnâ€™t load your companies</h1><p>{dataError}</p><button className="primary-button auth-submit" onClick={() => { setDataError(''); setCompanies([]); setReload(value => value + 1) }}>Try again</button><button className="auth-switch" onClick={async()=>{await signOut();setSession(null)}}>Sign out</button></div></div>
   if (!companyId) return companies.length > 1 ? <CompanyPicker companies={companies} onAdd={()=>setCompanies([])} onChoose={company=>{setCompanyId(company.id);setCompanyIdState(company.id)}} /> : <CompanyRegistration onCreated={company=>{setCompanies([company]);setCompanyIdState(company.id);setDataError('')}} />
@@ -127,6 +129,14 @@ function App() {
     {modal && <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&setModal(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-top"><div className="modal-icon"><Users size={19}/></div><button className="icon-button" onClick={()=>setModal(false)} aria-label="Close"><X size={18}/></button></div><div className="section-kicker">GROW THE CREW</div><h2 id="modal-title">Add a new person</h2><p>We will email an account setup link to their work email. Their username is that email; they will choose a password securely.</p><form onSubmit={addPerson}><div className="form-grid"><label>First name<input required maxLength={100} value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})} placeholder="e.g. Alex" /></label><label>Last name<input required maxLength={100} value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})} placeholder="e.g. Morgan" /></label></div><label>Work email<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="alex@company.com" /></label><div className="form-grid"><label>Employee ID<input required value={form.employee_code} onChange={e=>setForm({...form,employee_code:e.target.value})} placeholder="EMP-1043" /></label><label>Start date<input required type="date" value={form.joining_date} onChange={e=>setForm({...form,joining_date:e.target.value})} /></label></div><label>Department<select value={form.department_id} onChange={e=>setForm({...form,department_id:e.target.value})}><option value="">No department</option>{departments.map(department=><option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label>Onboarding workflow<select value={form.onboarding_template_id} onChange={e=>setForm({...form,onboarding_template_id:e.target.value})}><option value="">No workflow</option>{templates.map(template=><option key={template.id} value={template.id}>{template.name}</option>)}</select></label>{formError&&<div className="auth-error" role="alert">{formError}</div>}<div className="modal-actions"><button type="button" className="outline-button" onClick={()=>setModal(false)}>Cancel</button><button type="submit" disabled={submitting} className="primary-button">{submitting?'Savingâ€¦':<><Plus size={15}/> Add person</>}</button></div></form></section></div>}
     {toast && <div className="toast"><span><Check size={14}/></span>{toast}<button onClick={()=>setToast('')} aria-label="Dismiss"><X size={14}/></button></div>}
   </div>
+}
+
+function PublicHome({ onSignIn }: { onSignIn: () => void }) {
+  return <main className="public-home">
+    <header className="public-nav"><a className="brand" href="#home" aria-label="Orbit home"><span className="brand-mark"><span /></span><span className="brand-name">orbit<span className="brand-dot">.</span></span></a><button className="outline-button" onClick={onSignIn}>Sign in</button></header>
+    <section className="public-hero"><div className="public-copy"><div className="eyebrow"><span className="live-dot"/> PEOPLE OPERATIONS, IN ORBIT</div><h1>Make work feel more <span>human.</span></h1><p>Bring your people, onboarding, and everyday HR work together in one calm, clear workspace.</p><div className="public-actions"><button className="primary-button" onClick={onSignIn}>Get started <ArrowRight size={15}/></button><button className="public-text-button" onClick={onSignIn}>Sign in to your workspace</button></div></div><div className="public-visual" aria-hidden="true"><div className="public-orbit orbit-a"/><div className="public-orbit orbit-b"/><div className="public-orbit orbit-c"/><div className="public-center"><span className="brand-mark"><span/></span></div><div className="public-float float-people"><Users size={17}/><span>People</span></div><div className="public-float float-onboard"><ListChecks size={17}/><span>Onboarding</span></div><div className="public-float float-team"><Sparkles size={16}/><span>One team</span></div></div></section>
+    <footer className="public-footer"><span>Orbit People</span><span>People operations, made clearer.</span><span>© 2026</span></footer>
+  </main>
 }
 
 export default App
