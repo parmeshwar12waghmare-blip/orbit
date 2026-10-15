@@ -25,7 +25,7 @@ Express API (backend, default port 5000)
 PostgreSQL (DATABASE_URL is server-only)
 ```
 
-The browser does not connect to PostgreSQL. When the API is unreachable, the frontend shows an error; it does not replace API results with demo employees. The `VITE_SUPABASE_ANON_KEY` is a public browser key; never expose `DATABASE_URL` or a Supabase service-role key to Vite.
+The browser does not connect to PostgreSQL. When the API is unreachable, the frontend shows an error; it does not replace API results with demo employees. Use the Supabase publishable key (or the legacy anon key) in the browser; never expose `DATABASE_URL` or a Supabase secret/service-role key to Vite.
 
 ## Source tree
 
@@ -125,7 +125,7 @@ In a second terminal:
 ```powershell
 cd webApp
 Copy-Item .env.example .env.local
-# Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local
+# Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local
 npm install
 npm run dev
 ```

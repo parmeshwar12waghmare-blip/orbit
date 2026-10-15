@@ -1,6 +1,6 @@
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api").replace(/\/$/, "")
 const authUrl = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "")
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || ""
 
 export type Session = { access_token: string; refresh_token: string; expires_at?: number; user: { id: string; email: string } }
 export type Company = { id: string; legal_name: string; display_name: string; slug: string; status: string; roles?: string[] }
@@ -18,7 +18,7 @@ export const getCompanyId = () => localStorage.getItem("orbit.company") || ""
 export const setCompanyId = (id: string) => localStorage.setItem("orbit.company", id)
 
 async function authRequest<T>(path: string, body: unknown): Promise<T> {
-  if (!authUrl || !anonKey) throw new ApiError("Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable sign in.", 503)
+  if (!authUrl || !anonKey) throw new ApiError("Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (or the legacy VITE_SUPABASE_ANON_KEY) to enable sign in.", 503)
   const response = await fetch(`${authUrl}/auth/v1/${path}`, { method: "POST", headers: { "Content-Type": "application/json", apikey: anonKey }, body: JSON.stringify(body) })
   const result = await response.json().catch(() => ({}))
   if (!response.ok) throw new ApiError(result.msg || result.message || result.error_description || result.error || "Authentication request failed", response.status)

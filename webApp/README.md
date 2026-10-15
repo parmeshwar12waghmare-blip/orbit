@@ -4,4 +4,4 @@ React + Vite + TypeScript frontend styled with Tailwind CSS. `src/App.tsx` is th
 
 Tailwind is configured in `tailwind.config.cjs`, processed by `postcss.config.cjs`, and its directives are in `src/tailwind.css`. Global visual styles live in `src/styles.css`; the workflow page-specific CSS is in `src/WorkspacePages.css`.
 
-Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and the browser-safe `VITE_SUPABASE_ANON_KEY`. Start the API first, then run `npm install` and `npm run dev`. See the root README for the end-to-end request flow and API route list.
+Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and the browser-safe `VITE_SUPABASE_PUBLISHABLE_KEY` (or the legacy `VITE_SUPABASE_ANON_KEY`). Start or restart Vite after changing the file, then run `npm install` and `npm run dev`. See the root README for the end-to-end request flow and API route list.
