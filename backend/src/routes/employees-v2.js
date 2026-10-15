@@ -14,6 +14,28 @@ const select = `SELECT e.*,d.name AS department_name,g.title AS designation_titl
   LEFT JOIN company_locations l ON l.id=e.location_id AND l.company_id=e.company_id
   LEFT JOIN employees m ON m.id=e.manager_id AND m.company_id=e.company_id`;
 
+async function inviteEmployee(email, name) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SUPABASE_URL) {
+    const error = new Error("Employee account email is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the API server.");
+    error.status = 503;
+    throw error;
+  }
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const response = await fetch(`${process.env.SUPABASE_URL.replace(/\/$/, "")}/auth/v1/invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: key, authorization: `Bearer ${key}` },
+    body: JSON.stringify({ email, data: { full_name: name } }),
+    signal: AbortSignal.timeout(10000),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.id) {
+    const error = new Error(response.status === 422 ? "An account already exists for this email. Use the invitation flow or choose another email." : "Could not send the employee account invitation. Check Supabase Auth email settings and try again.");
+    error.status = response.status >= 500 ? 503 : 409;
+    throw error;
+  }
+  return result.id;
+}
+
 function validate(body, partial = false) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return "Request body must be an object";
   const unknown = Object.keys(body).filter(key => !fields.includes(key) && key !== "onboarding_template_id");
@@ -77,10 +99,18 @@ router.post("/", requirePermission("employees.create"), async (req, res, next) =
     const referenceIssue = await referencesBelongToCompany(client, body, companyId);
     if (referenceIssue) { await client.query("ROLLBACK"); return res.status(400).json({ error: { code: "INVALID_REFERENCE", message: referenceIssue } }); }
     if (body.manager_id === undefined && req.body.manager_id) { await client.query("ROLLBACK"); return res.status(400).json({ error: { code: "INVALID_MANAGER", message: "Invalid manager relationship" } }); }
+    const duplicate = await client.query("SELECT 1 FROM employees WHERE company_id=$1 AND deleted_at IS NULL AND (lower(email)=lower($2) OR employee_code=$3) LIMIT 1", [companyId, body.email, body.employee_code]);
+    if (duplicate.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ error: { code: "EMPLOYEE_EXISTS", message: "An employee with this email or employee ID already exists" } }); }
+    const authUserId = await inviteEmployee(body.email, `${body.first_name.trim()} ${body.last_name.trim()}`);
     const columns = fields.filter(key => body[key] !== undefined);
     const values = columns.map(key => typeof body[key] === "string" ? body[key].trim() : body[key]);
     const result = await client.query(`INSERT INTO employees(company_id,${columns.join(",")}) VALUES($${values.length + 1},${values.map((_, i) => `$${i + 1}`).join(",")}) RETURNING *`, [...values, companyId]);
     const employee = result.rows[0];
+    const account = await client.query(`INSERT INTO users(auth_user_id,email,account_status) VALUES($1,$2,'active')
+      ON CONFLICT(email) DO UPDATE SET auth_user_id=COALESCE(users.auth_user_id,EXCLUDED.auth_user_id),account_status='active'
+      WHERE users.auth_user_id IS NULL OR users.auth_user_id=EXCLUDED.auth_user_id RETURNING id`, [authUserId, body.email]);
+    if (!account.rowCount) throw Object.assign(new Error("This email is linked to another account"), { status: 409 });
+    await client.query("INSERT INTO company_memberships(company_id,user_id,status) VALUES($1,$2,'active') ON CONFLICT(company_id,user_id) DO UPDATE SET status='active'", [companyId, account.rows[0].id]);
     if (body.onboarding_template_id) {
       const process = await client.query("INSERT INTO onboarding_processes(company_id,employee_id,template_id,start_date,status) VALUES($1,$2,$3,$4,'in_progress') RETURNING id", [companyId, employee.id, body.onboarding_template_id, employee.joining_date]);
       await client.query(
@@ -92,8 +122,8 @@ router.post("/", requirePermission("employees.create"), async (req, res, next) =
     }
     await client.query("INSERT INTO audit_logs(company_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'employee.created','employee',$3)", [companyId, req.membership.user_id, employee.id]);
     await client.query("COMMIT");
-    res.status(201).json({ data: employee });
-  } catch (error) { await client.query("ROLLBACK"); next(error); }
+    res.status(201).json({ data: employee, account: { username: body.email, invitation_sent: true } });
+  } catch (error) { await client.query("ROLLBACK"); if (error.status) return res.status(error.status).json({ error: { code: "ACCOUNT_PROVISIONING_FAILED", message: error.message } }); next(error); }
   finally { client.release(); }
 });
 
@@ -124,6 +154,19 @@ router.patch("/:id", requirePermission("employees.update"), async (req, res, nex
     res.json({ data: result.rows[0] });
   } catch (error) { await client.query("ROLLBACK"); next(error); }
   finally { client.release(); }
+});
+
+router.post("/:id/password-reset", requirePermission("employees.update"), async (req, res, next) => {
+  if (!uuid.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_ID", message: "Invalid employee ID" } });
+  if (!process.env.SUPABASE_ANON_KEY || !process.env.SUPABASE_URL) return res.status(503).json({ error: { code: "AUTH_NOT_CONFIGURED", message: "Supabase Auth is not configured on the server" } });
+  try {
+    const employee = await pool.query("SELECT e.email FROM employees e JOIN users u ON lower(u.email)=lower(e.email) AND u.auth_user_id IS NOT NULL WHERE e.id=$1 AND e.company_id=$2 AND e.deleted_at IS NULL", [req.params.id, req.membership.company_id]);
+    if (!employee.rowCount) return res.status(404).json({ error: { code: "ACCOUNT_NOT_FOUND", message: "Employee account was not found" } });
+    const response = await fetch(`${process.env.SUPABASE_URL.replace(/\/$/, "")}/auth/v1/recover`, { method: "POST", headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_ANON_KEY }, body: JSON.stringify({ email: employee.rows[0].email }), signal: AbortSignal.timeout(10000) });
+    if (!response.ok) return res.status(503).json({ error: { code: "EMAIL_DELIVERY_FAILED", message: "Could not send the password reset email" } });
+    await pool.query("INSERT INTO audit_logs(company_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'employee.password_reset_requested','employee',$3)", [req.membership.company_id, req.membership.user_id, req.params.id]);
+    res.json({ data: { reset_email_sent: true } });
+  } catch (error) { next(error); }
 });
 
 router.delete("/:id", requirePermission("employees.deactivate"), async (req, res, next) => {
